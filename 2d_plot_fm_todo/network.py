@@ -83,6 +83,19 @@ class SimpleNet(nn.Module):
 
         ######## TODO ########
         # DO NOT change the code outside this part.
+        assert len(dim_hids) > 0, "hidden dimensions list is empty"
+        
+        _dim_list = [dim_in] + dim_hids + [dim_out]
+        
+        fan_in_list = _dim_list[:-1]
+        fan_out_list = _dim_list[1:]
+        self.layer_num = len(fan_in_list)
+
+        _modules = []
+        for idx, (fan_in, fan_out) in enumerate(zip(fan_in_list, fan_out_list)):
+            _modules.append(TimeLinear(dim_in=fan_in, dim_out=fan_out, num_timesteps=num_timesteps))
+
+        self.linear_list = nn.ModuleList(_modules)
 
         ######################
         
@@ -97,6 +110,9 @@ class SimpleNet(nn.Module):
         """
         ######## TODO ########
         # DO NOT change the code outside this part.
-
+        for idx, layer in enumerate(self.linear_list):
+            x = layer(x, t)
+            if idx != self.layer_num - 1:
+                x = F.relu(x)
         ######################
         return x
