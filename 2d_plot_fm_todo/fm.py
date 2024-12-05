@@ -43,11 +43,11 @@ class FMScheduler(nn.Module):
         """
         t = expand_t(t, x1)
 
-        ######## TODO ########
+        # TODO: written, most simple conditional flow
         # DO NOT change the code outside this part.
         # compute psi_t(x)
 
-        psi_t = x1
+        psi_t = (1 - (1-self.sigma_min) * t) * x + t * x1
         ######################
 
         return psi_t
@@ -58,10 +58,10 @@ class FMScheduler(nn.Module):
         x_next = xt + dt * vt
         """
 
-        ######## TODO ########
+        # TODO: written
         # DO NOT change the code outside this part.
         # implement each step of the first-order Euler method.
-        x_next = xt
+        x_next = xt + dt * vt
         ######################
 
         return x_next
@@ -93,12 +93,16 @@ class FlowMatching(nn.Module):
         ######## TODO ########
         # DO NOT change the code outside this part.
         # Implement the CFM objective.
+        psi_t = self.fm_scheduler.compute_psi_t(x1, t, x0)
+        
         if class_label is not None:
-            model_out = self.network(x1, t, class_label=class_label)
+            # model_out = self.network(x1, t, class_label=class_label)
+            pred = self.network(psi_t, t, class_label=class_label)
         else:
-            model_out = self.network(x1, t)
-
-        loss = x1.mean()
+            pred = self.network(psi_t, t)
+        
+        target = x1 - (1-self.fm_scheduler.sigma_min) * x0
+        loss = (pred - target).pow(2).mean()
         ######################
 
         return loss
@@ -142,8 +146,14 @@ class FlowMatching(nn.Module):
 
             ######## TODO ########
             # Complete the sampling loop
-
-            xt = self.fm_scheduler.step(xt, torch.zeros_like(xt), torch.zeros_like(t))
+            
+            _dt = t_next - t
+            dt = expand_t(_dt, xt)
+            pred = self.network(xt, t)
+            # xt = self.fm_scheduler.step(xt, torch.zeros_like(xt), torch.zeros_like(t))
+            xt = self.fm_scheduler.step(xt, pred, dt)
+            
+            # x_next = xt + dt * vt
 
             ######################
 
