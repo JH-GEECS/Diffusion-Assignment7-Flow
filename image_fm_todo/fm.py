@@ -43,11 +43,11 @@ class FMScheduler(nn.Module):
         """
         t = expand_t(t, x1)
 
-        ######## TODO ########
+        ######## TODO: written
         # DO NOT change the code outside this part.
         # compute psi_t(x)
 
-        psi_t = x1
+        psi_t = (1 - (1 - self.sigma_min) * t) * x + t * x1
         ######################
 
         return psi_t
@@ -58,10 +58,10 @@ class FMScheduler(nn.Module):
         x_next = xt + dt * vt
         """
 
-        ######## TODO ########
+        ######## TODO; written
         # DO NOT change the code outside this part.
         # implement each step of the first-order Euler method.
-        x_next = xt
+        x_next = xt + dt * vt
         ######################
 
         return x_next
@@ -93,12 +93,15 @@ class FlowMatching(nn.Module):
         ######## TODO ########
         # DO NOT change the code outside this part.
         # Implement the CFM objective.
-        if class_label is not None:
-            model_out = self.network(x1, t, class_label=class_label)
-        else:
-            model_out = self.network(x1, t)
+        psi_t = self.fm_scheduler.compute_psi_t(x1, t, x0)
 
-        loss = x1.mean()
+        if class_label is not None:
+            pred = self.network(psi_t, t, class_label=class_label)
+        else:
+            pred = self.network(psi_t, t)
+
+        target = x1 - (1 - self.fm_scheduler.sigma_min) * x0
+        loss = (pred - target).pow(2).mean()
         ######################
 
         return loss
@@ -138,12 +141,22 @@ class FlowMatching(nn.Module):
         xt = x_T
         for i, t in enumerate(pbar):
             t_next = timesteps[i + 1] if i < len(timesteps) - 1 else torch.ones_like(t)
-            
 
             ######## TODO ########
             # Complete the sampling loop
+            _dt = t_next - t
+            dt = expand_t(_dt, xt)
 
-            xt = self.fm_scheduler.step(xt, torch.zeros_like(xt), torch.zeros_like(t))
+            if do_classifier_free_guidance:
+                null_label = torch.zeros_like(class_label).to(self.device)
+                pred = (1 + guidance_scale) * self.network(
+                    xt, t, class_label=class_label
+                ) - guidance_scale * self.network(xt, t, class_label=null_label)
+            else:
+                pred = self.network(xt, t)
+
+
+            xt = self.fm_scheduler.step(xt, pred, dt)
 
             ######################
 
